@@ -8,8 +8,8 @@ Boost-RS is an  innovative  general  RS  framework that  enhances RS performance
 An [Anaconda python environment](https://www.anaconda.com/download) is recommmended.
 
 ```
-conda create --name boostrs --file enviroment.yml
-source activate boostrs
+conda create --name boost-rs --file enviroment.yml
+source activate boost-rs
 ```
 
 Check the environment.yml file, but primarily:
@@ -27,7 +27,7 @@ This repository contains an example of how to run the Boost-RS pipeline on the e
 
 ## Components
 - **mtl.py** -  functions for training and test on multi-task learning on auxiliary tasks using NMF baselines.
-- **mtl-concat.py** - functions for training and test on using NMF concatenation of attributesbaselines. 
+- **mtl-concat.py** - functions for training and test on using NMF concatenation of attributes baselines. 
 - **util.py** - functions to for loading data.
 
 ## Data
