@@ -1,8 +1,9 @@
+from util import load_interaction_data, load_mt_data, report_metric
+
 import copy
 import argparse
 import numpy as np
 from sklearn.metrics import roc_auc_score
-from util import load_interaction_data, load_mt_data, report_metric
 import sklearn.metrics as sk_m
 import torch
 import torch.nn.functional as F
@@ -28,9 +29,9 @@ class MLPModel(torch.nn.Module):
         return X
 
 
-class RecommenderGNN(torch.nn.Module):
+class Recommender(torch.nn.Module):
     def __init__(self, num_compound, num_enzyme, hidden_dim, dropout=0.5, device='cpu'):
-        super(RecommenderGNN, self).__init__()
+        super(Recommender, self).__init__()
 
         # embedding layer for compound and enzyme
         self.MF_Embedding_Compound = torch.nn.Embedding(num_compound, hidden_dim).to(device)
@@ -51,6 +52,8 @@ class RecommenderGNN(torch.nn.Module):
         self.ec_predictor = torch.nn.ModuleList()
         for ec_dim in [7, 68, 231]:
             self.ec_predictor.append(MLPModel(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=ec_dim, dropout=dropout, sigmoid_last_layer=False))
+
+        self.ko_predictor = MLPModel(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=5575, dropout=dropout, sigmoid_last_layer=True)
 
         self.fc1 = torch.nn.Sequential(
             torch.nn.Linear(hidden_dim * 2, hidden_dim),
@@ -97,6 +100,15 @@ class RecommenderGNN(torch.nn.Module):
             emb_enzyme_sub = self.MLP_Embedding_Enzyme(ec_ids)
 
         pred = self.ec_predictor[ec_i](emb_enzyme_sub)
+        return pred
+
+    def predict_ko(self, ec_ids, mf=True):
+        if mf:
+            emb_enzyme_sub = self.MF_Embedding_Enzyme(ec_ids)
+        else:
+            emb_enzyme_sub = self.MLP_Embedding_Enzyme(ec_ids)
+
+        pred = self.ko_predictor(emb_enzyme_sub)
         return pred
 
     def triplet_loss(self, triplets, fp, margin, MF=True):
@@ -188,7 +200,10 @@ def train():
         loss_rpair = contrastive_loss(rpairs_pos[:, :2], num_compound, fp=True)
 
         # multi-task: ko
-        loss_enzyme_ko = contrastive_loss(enzyme_ko, num_enzyme, fp=False)
+        # loss_enzyme_ko = contrastive_loss(enzyme_ko, num_enzyme, fp=False)
+        loss_ko_mf = weighted_binary_cross_entropy(model.predict_ko(torch.arange(num_enzyme).to(device), mf=True), enzyme_ko_hot, weights=[1.0, 1.0])
+        loss_ko_mlp = weighted_binary_cross_entropy(model.predict_ko(torch.arange(num_enzyme).to(device), mf=False), enzyme_ko_hot, weights=[1.0, 1.0])
+        loss_enzyme_ko = loss_ko_mf + loss_ko_mlp
 
         # compute training loss with dynamic weighting
         T = 2000
@@ -207,7 +222,7 @@ def train():
                 best_valid_map = val_map
                 best_model_state = copy.deepcopy(model.state_dict())
 
-            # early stop on auc
+            # early stop on map
             val_maps.append(val_map)
             if len(val_maps) == args.early_stop_window // args.eval_freq:
                 if val_maps[0] > np.max(val_maps[1:]):
@@ -216,7 +231,6 @@ def train():
 
     # testing
     model.load_state_dict(best_model_state)
-
     evaluate(model, te_pn, report_metric_bool=True, iteration=-1, num_compound=num_compound, num_enzyme=num_enzyme)
 
 
@@ -250,8 +264,8 @@ def evaluate(model, pn_, report_metric_bool=False, **kwargs):
             test_rst['auc'] = te_auc
             test_rst['map'] = te_map
 
-            for key in ['auc', 'map', 'enzyme_map', 'compound_map', 'rprecision', 'enzyme_rprecision', 'compound_rprecision',
-                        'enzyme_precision_1', 'compound_precision_1', 'enzyme_map_3', 'compound_map_3']:
+            for key in ['map', 'rprecision', 'auc', 'enzyme_map', 'enzyme_rprecision', 'enzyme_map_3', 'enzyme_precision_1',
+                                                    'compound_map', 'compound_rprecision', 'compound_map_3', 'compound_precision_1']:
                 if isinstance(test_rst[key], tuple):
                     print('%.3f' % (test_rst[key][0]), end=' ')
                 else:
@@ -265,27 +279,39 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run MLT with NMF.")
     parser.add_argument('--gpu', type=int, default=0)
     # training parameters
-    parser.add_argument('--iterations', type=int, default=3000)
+    parser.add_argument('--iterations', type=int, default=3500)
     parser.add_argument('--lr', type=float, default=5e-3)
     parser.add_argument('--l2_reg', type=float, default=1e-6)
     parser.add_argument('--dropout', type=float, default=0.5)
-    parser.add_argument('--neg_rate', type=int, default=1)
+    parser.add_argument('--neg_rate', type=int, default=25)
     parser.add_argument('--margin', type=float, default=1.0)
     parser.add_argument('--eval_freq', type=int, default=50)
     parser.add_argument('--early_stop_window', type=int, default=200)
     # model structure
-    parser.add_argument('--hidden_dim', type=int, default=512)
+    parser.add_argument('--hidden_dim', type=int, default=256)
     args = parser.parse_args()
     print(args)
 
-    device = 'cuda:0' if torch.cuda.is_available() and args.gpu >= 0 else 'cpu'
+    device = 'cuda:' + str(args.gpu) if torch.cuda.is_available() and args.gpu >= 0 else 'cpu'
 
     # load data
     tr_p, va_p, te_p, va_pn, te_pn, n_all_exclusive, num_compound, num_enzyme, compound_i2n, enzyme_i2n, fp_label, ec_label = load_interaction_data()
-    rpairs_pos, cpd_module, cpd_pathway, enzyme_ko, enzyme_ko_hot, enzyme_module, enzyme_pathway = load_mt_data()
+    rpairs_pos, _, _, enzyme_ko, enzyme_ko_hot, _, _ = load_mt_data()
+
+    tr_p = tr_p.to(device)
+    va_p = va_p.to(device)
+    te_p = te_p.to(device)
+    va_pn = va_pn.to(device)
+    te_pn = te_pn.to(device)
+    n_all_exclusive = n_all_exclusive.to(device)
+    fp_label = fp_label.to(device)
+    ec_label = ec_label.to(device)
+    rpairs_pos = rpairs_pos.to(device)
+    enzyme_ko = enzyme_ko.to(device)
+    enzyme_ko_hot = enzyme_ko_hot.to(device)
 
     # construct model
-    model = RecommenderGNN(num_compound=num_compound, num_enzyme=num_enzyme,
+    model = Recommender(num_compound=num_compound, num_enzyme=num_enzyme,
                            hidden_dim=args.hidden_dim, dropout=args.dropout, device=device).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2_reg)
