@@ -37,8 +37,8 @@ python mtl.py
 ## Data
 
 - Data to run Boost-RS on enzyme-substrate interaction prediction.
-Interaction data
-Auxiliary data, including FP, RC, EC, and KO.
+  - Interaction data
+  - Auxiliary data, including FP, RC, EC, and KO.
 
 ## Authors:
 This script is written by Xinmeng Li, Li-ping Liu, Soha Hassoun (Soha.Hassoun@tufts.edu). 
