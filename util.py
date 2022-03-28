@@ -4,7 +4,7 @@ import sklearn.metrics as sk_m
 
 
 def load_interaction_data():
-    with open('./data/kegg_interaction.pkl', 'rb') as fi:
+    with open('./data/interaction.pkl', 'rb') as fi:
         data = pickle.load(fi)
     tr_p, va_p, te_p, va_pn, te_pn, n_all_exclusive, num_compound, num_enzyme, compound_i2n, \
     enzyme_i2n, fp_label, ec_label = data['tr_p'], data['va_p'], data['te_p'], data['va_pn'], data['te_pn'], data['n_all_exclusive'],\
@@ -13,7 +13,7 @@ def load_interaction_data():
 
 
 def load_mt_data():
-    with open('./data/mt_data.pkl', 'rb') as fi:
+    with open('./data/auxiliary.pkl', 'rb') as fi:
         data = pickle.load(fi)
     rpairs_pos, cpd_module, cpd_pathway, enzyme_ko, enzyme_ko_hot, enzyme_module, enzyme_pathway = data['rpairs_pos'], data['cpd_module'], data['cpd_pathway'],\
                                           data['enzyme_ko'], data['enzyme_ko_hot'], data['enzyme_module'], data['enzyme_pathway']
