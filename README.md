@@ -22,7 +22,11 @@ Check the environment.yml file, but primarily:
 
 ## Example: Enzyme-Substrate Interaction Prediction
 
-This repository contains an example of how to run the Boost-RS pipeline on the enzyme-substrate interaction prediction
+This repository contains an example of running the Boost-RS pipeline on the enzyme-substrate interaction prediction
+### To run Boost-RS on enzyme-substrate interaction
+```
+python mtl.py 
+```
 
 
 ## Components
