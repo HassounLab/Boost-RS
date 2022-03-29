@@ -1,3 +1,2 @@
-interaction data file: interaction.pkl
-auxiliary data file: auxiliary.pkl
-source: https://tufts.box.com/s/tc46ue1d05yyvhk3z486nuklokk35hug
+interaction data file: interaction.pkl from KEGG
+auxiliary data file: auxiliary.pkl from KEGG and PubChem
